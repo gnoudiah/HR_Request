@@ -38,9 +38,13 @@
         </div>
       </div>
 
-      <!-- User Switcher for RBAC Simulation -->
+      <!-- User Switcher for RBAC Simulation & Live Refresh -->
       <div class="flex items-center space-x-3">
-        <div class="hidden sm:flex items-center text-xs text-slate-500 mr-2">
+        <button onclick="refreshData()" title="Làm mới dữ liệu tức thì" class="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 transition">
+          <i class="bi bi-arrow-clockwise text-brand-600 font-bold" id="refreshIcon"></i>
+          <span class="hidden sm:inline">Làm mới</span>
+        </button>
+        <div class="hidden sm:flex items-center text-xs text-slate-500 mr-1">
           <i class="bi bi-person-badge mr-1.5 text-slate-400"></i> Đang đăng nhập:
         </div>
         <select id="userSelector" onchange="changeCurrentUser()" class="text-sm bg-slate-100 border border-slate-300 rounded-lg px-3 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">

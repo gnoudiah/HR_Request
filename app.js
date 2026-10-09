@@ -143,24 +143,53 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadMetadata();
   await loadDashboardStats();
   await loadRequests();
+
+  // Auto-refresh background poll every 10 seconds for real-time collaboration
+  setInterval(async () => {
+    if (!document.getElementById('createModal').classList.contains('hidden')) return;
+    await loadDashboardStats();
+    await loadRequests(true);
+  }, 10000);
 });
 
-// Client-side API mock fallback (works perfectly on Vercel without active backend)
-async function apiFetch(url, options = {}) {
+async function refreshData() {
+  const icon = document.getElementById('refreshIcon');
+  if (icon) icon.classList.add('animate-spin');
   try {
-    options.headers = options.headers || {};
-    if (currentUser) {
-      options.headers['X-User-Id'] = currentUser.id;
-    }
+    await loadDashboardStats();
+    await loadRequests();
+  } finally {
+    setTimeout(() => {
+      if (icon) icon.classList.remove('animate-spin');
+    }, 500);
+  }
+}
+
+// Client-Server API Bridge
+async function apiFetch(url, options = {}) {
+  options.headers = options.headers || {};
+  if (currentUser) {
+    options.headers['X-User-Id'] = currentUser.id;
+  }
+
+  try {
     const res = await fetch(url, options);
     if (res.ok) {
       return await res.json();
     }
-  } catch (e) {
-    // Fall back to client storage
+    // If backend responded with 400 or other logical error
+    if (res.status === 400 || res.status === 404) {
+      const err = await res.json().catch(() => ({ message: res.statusText }));
+      throw new Error(err.message || 'Lỗi xử lý yêu cầu');
+    }
+  } catch (err) {
+    // Only fall back to local store if network completely failed or offline
+    if (err.message && (err.message.includes('Lỗi') || err.message.includes('trống') || err.message.includes('bắt buộc'))) {
+      throw err;
+    }
   }
 
-  // Handle client-side routing
+  // Handle client-side routing fallback
   return clientStoreHandler(url, options);
 }
 

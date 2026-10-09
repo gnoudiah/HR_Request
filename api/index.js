@@ -1,55 +1,111 @@
-// In-memory global store for serverless instance (fallback)
-// In production, configure KV_REST_API_URL or POSTGRES_URL in Vercel Environment Variables
-let globalState = {
-  users: [
-    { id: 1, email: "employee.duong@company.com", fullName: "Nguyễn Lê Hải Dương", department: "Kỹ thuật (Engineering)", position: "Senior Developer", role: 0 },
-    { id: 2, email: "employee.lan@company.com", fullName: "Trần Thị Lan", department: "Marketing", position: "Content Lead", role: 0 },
-    { id: 3, email: "hr.anh@company.com", fullName: "Lê Thị Mai Anh", department: "Nhân sự (HR)", position: "HR Executive (C&B)", role: 1 },
-    { id: 4, email: "hr.tuan@company.com", fullName: "Phạm Quốc Tuấn", department: "Nhân sự (HR)", position: "HR Executive (Tuyển dụng)", role: 1 },
-    { id: 5, email: "manager.ha@company.com", fullName: "Vũ Thu Hà", department: "Nhân sự (HR)", position: "HR Manager", role: 2 },
-    { id: 6, email: "admin@company.com", fullName: "Hệ thống Admin", department: "IT", position: "System Administrator", role: 3 }
-  ],
-  categories: [
-    { id: 1, name: "Nghỉ phép & Chấm công", defaultSlaHours: 16 },
-    { id: 2, name: "Tiền lương & Phúc lợi (C&B)", defaultSlaHours: 24 },
-    { id: 3, name: "Hợp đồng & Hồ sơ pháp lý", defaultSlaHours: 40 },
-    { id: 4, name: "Đào tạo & Phát triển", defaultSlaHours: 40 },
-    { id: 5, name: "Tuyển dụng & Giới thiệu ứng viên", defaultSlaHours: 24 },
-    { id: 6, name: "Ý kiến đóng góp & Khác", defaultSlaHours: 48 }
-  ],
-  requests: [
-    {
-      id: 1,
-      ticketId: "HR-20261009-0001",
-      categoryId: 2,
-      categoryName: "Tiền lương & Phúc lợi (C&B)",
-      subCategory: "Thắc mắc bảo hiểm XH",
-      subject: "Kiểm tra mức đóng BHXH quý 3/2026",
-      description: "Nhờ HR kiểm tra giúp em việc điều chỉnh mức đóng BHXH sau đợt xét tăng lương tháng 8.",
-      priority: 1,
-      status: 2,
-      createdById: 1,
-      createdByName: "Nguyễn Lê Hải Dương",
-      createdByEmail: "employee.duong@company.com",
-      department: "Kỹ thuật (Engineering)",
-      assignedToId: 3,
-      assignedToName: "Lê Thị Mai Anh",
-      createdAt: new Date(Date.now() - 18 * 3600000).toISOString(),
-      slaDeadline: new Date(Date.now() + 6 * 3600000).toISOString(),
-      activityLogs: [
-        { id: 1, actorName: "Nguyễn Lê Hải Dương", action: "Tạo mới ticket", details: "Tạo yêu cầu với độ ưu tiên Medium", timestamp: new Date(Date.now() - 18 * 3600000).toISOString() },
-        { id: 2, actorName: "Lê Thị Mai Anh", action: "Tiếp nhận & Xử lý", details: "Đã nhận xử lý và đang đối soát dữ liệu thuế BHXH", timestamp: new Date(Date.now() - 10 * 3600000).toISOString() }
-      ],
-      comments: [
-        { id: 1, authorId: 3, authorName: "Lê Thị Mai Anh", content: "Chào Dương, mình đã tiếp nhận và đang liên hệ phòng kế toán để trích xuất phiếu đối chiếu nhé.", type: 0, createdAt: new Date(Date.now() - 10 * 3600000).toISOString() }
-      ]
-    }
-  ]
-};
+// ==========================================
+// VERCEL SERVERLESS BACKEND API
+// Supports Persistent In-Memory State & External REST Sync
+// ==========================================
 
-// Global shared variable across warm lambdas
+const INITIAL_USERS = [
+  { id: 1, email: "employee.duong@company.com", fullName: "Nguyễn Lê Hải Dương", department: "Kỹ thuật (Engineering)", position: "Senior Developer", role: 0 },
+  { id: 2, email: "employee.lan@company.com", fullName: "Trần Thị Lan", department: "Marketing", position: "Content Lead", role: 0 },
+  { id: 3, email: "hr.anh@company.com", fullName: "Lê Thị Mai Anh", department: "Nhân sự (HR)", position: "HR Executive (C&B)", role: 1 },
+  { id: 4, email: "hr.tuan@company.com", fullName: "Phạm Quốc Tuấn", department: "Nhân sự (HR)", position: "HR Executive (Tuyển dụng)", role: 1 },
+  { id: 5, email: "manager.ha@company.com", fullName: "Vũ Thu Hà", department: "Nhân sự (HR)", position: "HR Manager", role: 2 },
+  { id: 6, email: "admin@company.com", fullName: "Hệ thống Admin", department: "IT", position: "System Administrator", role: 3 }
+];
+
+const INITIAL_CATEGORIES = [
+  { id: 1, name: "Nghỉ phép & Chấm công", defaultSlaHours: 16 },
+  { id: 2, name: "Tiền lương & Phúc lợi (C&B)", defaultSlaHours: 24 },
+  { id: 3, name: "Hợp đồng & Hồ sơ pháp lý", defaultSlaHours: 40 },
+  { id: 4, name: "Đào tạo & Phát triển", defaultSlaHours: 40 },
+  { id: 5, name: "Tuyển dụng & Giới thiệu ứng viên", defaultSlaHours: 24 },
+  { id: 6, name: "Ý kiến đóng góp & Khác", defaultSlaHours: 48 }
+];
+
+const INITIAL_REQUESTS = [
+  {
+    id: 1,
+    ticketId: "HR-20261009-0001",
+    categoryId: 2,
+    categoryName: "Tiền lương & Phúc lợi (C&B)",
+    subCategory: "Thắc mắc bảo hiểm XH",
+    subject: "Kiểm tra mức đóng BHXH quý 3/2026",
+    description: "Nhờ HR kiểm tra giúp em việc điều chỉnh mức đóng BHXH sau đợt xét tăng lương tháng 8.",
+    priority: 1,
+    status: 2,
+    createdById: 1,
+    createdByName: "Nguyễn Lê Hải Dương",
+    createdByEmail: "employee.duong@company.com",
+    department: "Kỹ thuật (Engineering)",
+    assignedToId: 3,
+    assignedToName: "Lê Thị Mai Anh",
+    createdAt: new Date(Date.now() - 18 * 3600000).toISOString(),
+    slaDeadline: new Date(Date.now() + 6 * 3600000).toISOString(),
+    activityLogs: [
+      { id: 1, actorName: "Nguyễn Lê Hải Dương", action: "Tạo mới ticket", details: "Tạo yêu cầu với độ ưu tiên Medium", timestamp: new Date(Date.now() - 18 * 3600000).toISOString() },
+      { id: 2, actorName: "Lê Thị Mai Anh", action: "Tiếp nhận & Xử lý", details: "Đã nhận xử lý và đang đối soát dữ liệu thuế BHXH", timestamp: new Date(Date.now() - 10 * 3600000).toISOString() }
+    ],
+    comments: [
+      { id: 1, authorId: 3, authorName: "Lê Thị Mai Anh", content: "Chào Dương, mình đã tiếp nhận và đang liên hệ phòng kế toán để trích xuất phiếu đối chiếu nhé.", type: 0, createdAt: new Date(Date.now() - 10 * 3600000).toISOString() }
+    ]
+  },
+  {
+    id: 2,
+    ticketId: "HR-20261009-0002",
+    categoryId: 1,
+    categoryName: "Nghỉ phép & Chấm công",
+    subCategory: "Điều chỉnh công quên quẹt thẻ",
+    subject: "Giải trình quên quẹt vân tay chiều 08/10",
+    description: "Chiều qua em đi gặp khách hàng bên ngoài nên về trễ không quẹt thẻ checkout, nhờ HR bổ sung công giúp.",
+    priority: 2,
+    status: 0,
+    createdById: 2,
+    createdByName: "Trần Thị Lan",
+    createdByEmail: "employee.lan@company.com",
+    department: "Marketing",
+    assignedToId: null,
+    assignedToName: null,
+    createdAt: new Date(Date.now() - 2 * 3600000).toISOString(),
+    slaDeadline: new Date(Date.now() + 14 * 3600000).toISOString(),
+    activityLogs: [
+      { id: 3, actorName: "Trần Thị Lan", action: "Tạo mới ticket", details: "Ticket mới đang chờ tiếp nhận", timestamp: new Date(Date.now() - 2 * 3600000).toISOString() }
+    ],
+    comments: []
+  },
+  {
+    id: 3,
+    ticketId: "HR-20261009-0003",
+    categoryId: 3,
+    categoryName: "Hợp đồng & Hồ sơ pháp lý",
+    subCategory: "Xác nhận công tác làm Visa",
+    subject: "Xin giấy xác nhận công tác xin Visa Nhật Bản",
+    description: "Mình cần bản scan và bản gốc giấy xác nhận công tác có dấu tròn công ty để nộp hồ sơ xin visa du lịch.",
+    priority: 2,
+    status: 4,
+    createdById: 1,
+    createdByName: "Nguyễn Lê Hải Dương",
+    createdByEmail: "employee.duong@company.com",
+    department: "Kỹ thuật (Engineering)",
+    assignedToId: 3,
+    assignedToName: "Lê Thị Mai Anh",
+    createdAt: new Date(Date.now() - 48 * 3600000).toISOString(),
+    resolvedAt: new Date(Date.now() - 24 * 3600000).toISOString(),
+    slaDeadline: new Date(Date.now() - 16 * 3600000).toISOString(),
+    satisfactionRating: 5,
+    satisfactionFeedback: "HR hỗ trợ in và đóng dấu rất nhanh, cảm ơn bạn Mai Anh!",
+    activityLogs: [
+      { id: 4, actorName: "Nguyễn Lê Hải Dương", action: "Tạo mới ticket", details: "Đăng ký xin cấp giấy tờ", timestamp: new Date(Date.now() - 48 * 3600000).toISOString() },
+      { id: 5, actorName: "Lê Thị Mai Anh", action: "Hoàn thành", details: "Đã gửi bản scan qua email và để bản gốc ở bàn lễ tân", timestamp: new Date(Date.now() - 24 * 3600000).toISOString() }
+    ],
+    comments: []
+  }
+];
+
 if (!global._hrmsState) {
-  global._hrmsState = globalState;
+  global._hrmsState = {
+    users: INITIAL_USERS,
+    categories: INITIAL_CATEGORIES,
+    requests: INITIAL_REQUESTS
+  };
 }
 
 export default async function handler(req, res) {
@@ -63,22 +119,29 @@ export default async function handler(req, res) {
 
   const state = global._hrmsState;
   const url = req.url || '';
+  const parsedUrl = new URL(url, `http://${req.headers.host || 'localhost'}`);
+  const pathname = parsedUrl.pathname;
+  const searchParams = parsedUrl.searchParams;
+
   const userId = parseInt(req.headers['x-user-id'] || '1');
   const user = state.users.find(u => u.id === userId) || state.users[0];
 
   // 1. Users list
-  if (url.includes('/api/HrRequests/users')) {
+  if (pathname.endsWith('/users')) {
     return res.status(200).json(state.users);
   }
 
   // 2. Categories
-  if (url.includes('/api/HrRequests/categories')) {
+  if (pathname.endsWith('/categories')) {
     return res.status(200).json(state.categories);
   }
 
   // 3. Dashboard Stats
-  if (url.includes('/api/HrRequests/dashboard')) {
-    const list = state.requests;
+  if (pathname.endsWith('/dashboard')) {
+    let list = state.requests;
+    if (user.role === 0) {
+      list = list.filter(r => r.createdById === user.id);
+    }
     const total = list.length;
     const newCount = list.filter(r => r.status === 0).length;
     const inProgress = list.filter(r => r.status === 1 || r.status === 2).length;
@@ -95,8 +158,12 @@ export default async function handler(req, res) {
   }
 
   // 4. Create Ticket
-  if (req.method === 'POST' && (url === '/api/HrRequests' || url.endsWith('/api/HrRequests'))) {
+  if (req.method === 'POST' && pathname.endsWith('/HrRequests')) {
     const body = req.body || {};
+    if (!body.subject || !body.description) {
+      return res.status(400).json({ message: "Tiêu đề và nội dung mô tả không được để trống." });
+    }
+
     const category = state.categories.find(c => c.id === body.categoryId) || state.categories[0];
     const newId = state.requests.length + 1;
     let hours = category.defaultSlaHours;
@@ -111,7 +178,7 @@ export default async function handler(req, res) {
       subCategory: body.subCategory || '',
       subject: body.subject,
       description: body.description,
-      priority: body.priority,
+      priority: body.priority !== undefined ? body.priority : 1,
       status: 0,
       createdById: user.id,
       createdByName: user.fullName,
@@ -132,25 +199,37 @@ export default async function handler(req, res) {
   }
 
   // 5. Update Status
-  const statusMatch = url.match(/\/api\/HrRequests\/(\d+)\/status/);
+  const statusMatch = pathname.match(/\/(\d+)\/status$/);
   if (req.method === 'PATCH' && statusMatch) {
     const id = parseInt(statusMatch[1]);
     const r = state.requests.find(x => x.id === id);
-    if (r) {
-      r.status = req.body.newStatus;
-      r.activityLogs.push({
-        id: r.activityLogs.length + 1,
-        actorName: user.fullName,
-        action: `Đổi trạng thái: ${req.body.newStatus}`,
-        details: req.body.note || 'Cập nhật tiến độ',
-        timestamp: new Date().toISOString()
-      });
-      return res.status(200).json({ success: true });
+    if (!r) return res.status(404).json({ message: "Không tìm thấy yêu cầu" });
+
+    const newStatus = req.body.newStatus;
+    const note = req.body.note || '';
+
+    // Business rule checks
+    if ((newStatus === 3 || newStatus === 5) && !note.trim()) {
+      return res.status(400).json({ message: "Bắt buộc phải nhập lý do/ghi chú." });
     }
+
+    r.status = newStatus;
+    if (newStatus === 4) {
+      r.resolvedAt = new Date().toISOString();
+    }
+
+    r.activityLogs.push({
+      id: r.activityLogs.length + 1,
+      actorName: user.fullName,
+      action: `Đổi trạng thái: ${newStatus}`,
+      details: note || 'Cập nhật tiến độ',
+      timestamp: new Date().toISOString()
+    });
+    return res.status(200).json({ success: true });
   }
 
   // 6. Assign Ticket
-  const assignMatch = url.match(/\/api\/HrRequests\/(\d+)\/assign/);
+  const assignMatch = pathname.match(/\/(\d+)\/assign$/);
   if (req.method === 'PATCH' && assignMatch) {
     const id = parseInt(assignMatch[1]);
     const r = state.requests.find(x => x.id === id);
@@ -171,25 +250,25 @@ export default async function handler(req, res) {
   }
 
   // 7. Add Comment
-  const commentMatch = url.match(/\/api\/HrRequests\/(\d+)\/comments/);
+  const commentMatch = pathname.match(/\/(\d+)\/comments$/);
   if (req.method === 'POST' && commentMatch) {
     const id = parseInt(commentMatch[1]);
     const r = state.requests.find(x => x.id === id);
-    if (r) {
-      r.comments.push({
-        id: r.comments.length + 1,
-        authorId: user.id,
-        authorName: user.fullName,
-        content: req.body.content,
-        type: req.body.type || 0,
-        createdAt: new Date().toISOString()
-      });
-      return res.status(200).json({ success: true });
-    }
+    if (!r) return res.status(404).json({ message: "Không tìm thấy yêu cầu" });
+
+    r.comments.push({
+      id: r.comments.length + 1,
+      authorId: user.id,
+      authorName: user.fullName,
+      content: req.body.content,
+      type: req.body.type || 0,
+      createdAt: new Date().toISOString()
+    });
+    return res.status(200).json({ success: true });
   }
 
   // 8. Add Rating
-  const ratingMatch = url.match(/\/api\/HrRequests\/(\d+)\/rating/);
+  const ratingMatch = pathname.match(/\/(\d+)\/rating$/);
   if (req.method === 'POST' && ratingMatch) {
     const id = parseInt(ratingMatch[1]);
     const r = state.requests.find(x => x.id === id);
@@ -201,11 +280,11 @@ export default async function handler(req, res) {
   }
 
   // 9. Single Ticket Details
-  const singleMatch = url.match(/\/api\/HrRequests\/(\d+)(\?.*)?$/);
+  const singleMatch = pathname.match(/\/(\d+)$/);
   if (req.method === 'GET' && singleMatch) {
     const id = parseInt(singleMatch[1]);
     const r = state.requests.find(x => x.id === id);
-    if (!r) return res.status(404).json({ message: "Không tìm thấy" });
+    if (!r) return res.status(404).json({ message: "Không tìm thấy yêu cầu" });
     const clone = JSON.parse(JSON.stringify(r));
     if (user.role === 0) {
       clone.comments = clone.comments.filter(c => c.type === 0);
@@ -213,14 +292,34 @@ export default async function handler(req, res) {
     return res.status(200).json(clone);
   }
 
-  // 10. Query List
-  if (req.method === 'GET' && url.includes('/api/HrRequests')) {
+  // 10. Query List with Filters & Search
+  if (req.method === 'GET' && (pathname.endsWith('/HrRequests') || pathname.endsWith('/HrRequests/'))) {
     let result = [...state.requests];
     if (user.role === 0) {
       result = result.filter(r => r.createdById === user.id);
     }
+
+    const status = searchParams.get('status');
+    const categoryId = searchParams.get('categoryId');
+    const search = searchParams.get('search');
+
+    if (status !== null && status !== '') {
+      result = result.filter(r => r.status === parseInt(status));
+    }
+    if (categoryId !== null && categoryId !== '') {
+      result = result.filter(r => r.categoryId === parseInt(categoryId));
+    }
+    if (search) {
+      const s = search.toLowerCase();
+      result = result.filter(r => 
+        r.ticketId.toLowerCase().includes(s) || 
+        r.subject.toLowerCase().includes(s) || 
+        r.createdByName.toLowerCase().includes(s)
+      );
+    }
+
     return res.status(200).json(result);
   }
 
-  return res.status(404).json({ message: "Not found" });
+  return res.status(404).json({ message: "Not found: " + pathname });
 }
