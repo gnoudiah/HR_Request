@@ -454,12 +454,68 @@ async function loadDashboardStats() {
   `;
 }
 
+let activeViewMode = 'all';
+let currentUploadedFile = null;
+
+function setViewMode(mode) {
+  activeViewMode = mode;
+  const tabAll = document.getElementById('tabAll');
+  const tabMine = document.getElementById('tabMine');
+
+  if (mode === 'all') {
+    tabAll.className = 'px-3 py-1.5 rounded-md bg-white text-slate-800 shadow-sm transition font-bold';
+    tabMine.className = 'px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition font-medium';
+  } else {
+    tabMine.className = 'px-3 py-1.5 rounded-md bg-white text-slate-800 shadow-sm transition font-bold';
+    tabAll.className = 'px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition font-medium';
+  }
+  loadRequests();
+}
+
+function handleFilePreview(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const container = document.getElementById('filePreviewContainer');
+  const imgPreview = document.getElementById('imgPreview');
+  const namePreview = document.getElementById('fileNamePreview');
+
+  namePreview.textContent = `${file.name} (${Math.round(file.size / 1024)} KB)`;
+  container.classList.remove('hidden');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    currentUploadedFile = {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      dataUrl: e.target.result
+    };
+
+    if (file.type.startsWith('image/')) {
+      imgPreview.src = e.target.result;
+      imgPreview.classList.remove('hidden');
+    } else {
+      imgPreview.classList.add('hidden');
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearFilePreview() {
+  document.getElementById('modalAttachment').value = '';
+  document.getElementById('filePreviewContainer').classList.add('hidden');
+  document.getElementById('imgPreview').src = '';
+  document.getElementById('fileNamePreview').textContent = '';
+  currentUploadedFile = null;
+}
+
 async function loadRequests() {
   const status = document.getElementById('statusFilter').value;
   const categoryId = document.getElementById('categoryFilter').value;
   const search = document.getElementById('searchInput').value;
 
-  let url = '/api/HrRequests?';
+  let url = `/api/HrRequests?viewMode=${activeViewMode}&`;
   if (status !== '') url += `status=${status}&`;
   if (categoryId !== '') url += `categoryId=${categoryId}&`;
   if (search) url += `search=${encodeURIComponent(search)}&`;
@@ -475,12 +531,13 @@ async function loadRequests() {
     const st = STATUS_MAP[req.status] || { label: req.status, class: 'bg-slate-100' };
     const pr = PRIORITY_MAP[req.priority] || { label: req.priority, class: 'bg-slate-100' };
     const slaBadge = formatSlaStatus(req);
+    const hasAttach = req.attachment ? '<i class="bi bi-paperclip ml-1 text-brand-600" title="Có tệp đính kèm"></i>' : '';
 
     return `
       <tr class="hover:bg-slate-50/80 transition cursor-pointer" onclick="openDetailModal(${req.id})">
         <td class="py-3 px-4 font-mono font-bold text-xs text-brand-600">${req.ticketId}</td>
         <td class="py-3 px-4">
-          <div class="font-semibold text-slate-800 line-clamp-1">${escapeHtml(req.subject)}</div>
+          <div class="font-semibold text-slate-800 line-clamp-1 flex items-center">${escapeHtml(req.subject)}${hasAttach}</div>
           <div class="text-xs text-slate-400 mt-0.5">${escapeHtml(req.categoryName)}</div>
         </td>
         <td class="py-3 px-4">
@@ -526,10 +583,12 @@ function debounceSearch() {
 
 function openCreateModal() {
   document.getElementById('createForm').reset();
+  clearFilePreview();
   document.getElementById('createModal').classList.remove('hidden');
 }
 function closeCreateModal() {
   document.getElementById('createModal').classList.add('hidden');
+  clearFilePreview();
 }
 
 async function submitCreateRequest(e) {
@@ -539,7 +598,8 @@ async function submitCreateRequest(e) {
     subCategory: document.getElementById('modalSubCategory').value,
     subject: document.getElementById('modalSubject').value,
     priority: parseInt(document.getElementById('modalPriority').value),
-    description: document.getElementById('modalDescription').value
+    description: document.getElementById('modalDescription').value,
+    attachment: currentUploadedFile
   };
 
   await apiFetch('/api/HrRequests', {
@@ -565,6 +625,38 @@ async function openDetailModal(id) {
   document.getElementById('dtCreatedAt').textContent = new Date(req.createdAt).toLocaleString('vi-VN');
   document.getElementById('dtSlaDeadline').textContent = new Date(req.slaDeadline).toLocaleString('vi-VN');
   document.getElementById('dtAssignedTo').textContent = req.assignedToName || 'Chưa gán nhân sự xử lý';
+
+  // Render attachment if exists
+  const attachContainer = document.getElementById('dtAttachmentContainer');
+  const attachContent = document.getElementById('dtAttachmentContent');
+  if (req.attachment && req.attachment.dataUrl) {
+    attachContainer.classList.remove('hidden');
+    const isImg = req.attachment.type && req.attachment.type.startsWith('image/');
+    if (isImg) {
+      attachContent.innerHTML = `
+        <div class="mt-2">
+          <a href="${req.attachment.dataUrl}" target="_blank" title="Bấm để mở ảnh gốc">
+            <img src="${req.attachment.dataUrl}" alt="${escapeHtml(req.attachment.name)}" class="max-h-56 max-w-full rounded-lg border border-slate-200 shadow-sm hover:opacity-95 transition" />
+          </a>
+          <div class="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
+            <i class="bi bi-image"></i> ${escapeHtml(req.attachment.name)}
+          </div>
+        </div>
+      `;
+    } else {
+      attachContent.innerHTML = `
+        <div class="mt-2">
+          <a href="${req.attachment.dataUrl}" download="${escapeHtml(req.attachment.name)}" class="inline-flex items-center space-x-2 px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-semibold text-brand-700 hover:bg-brand-50 shadow-sm transition">
+            <i class="bi bi-file-earmark-arrow-down text-base"></i>
+            <span>Tải về: ${escapeHtml(req.attachment.name)}</span>
+          </a>
+        </div>
+      `;
+    }
+  } else {
+    attachContainer.classList.add('hidden');
+    attachContent.innerHTML = '';
+  }
 
   const st = STATUS_MAP[req.status] || { label: req.status, class: 'bg-slate-100' };
   const stBadge = document.getElementById('dtStatusBadge');

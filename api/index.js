@@ -188,8 +188,9 @@ export default async function handler(req, res) {
       assignedToName: null,
       createdAt: new Date().toISOString(),
       slaDeadline: new Date(Date.now() + hours * 3600000).toISOString(),
+      attachment: body.attachment || null,
       activityLogs: [
-        { id: 1, actorName: user.fullName, action: "Tạo mới ticket", details: `Gửi yêu cầu '${body.subject}'`, timestamp: new Date().toISOString() }
+        { id: 1, actorName: user.fullName, action: "Tạo mới ticket", details: `Gửi yêu cầu '${body.subject}'${body.attachment ? ' (kèm tệp đính kèm)' : ''}`, timestamp: new Date().toISOString() }
       ],
       comments: []
     };
@@ -295,9 +296,14 @@ export default async function handler(req, res) {
   // 10. Query List with Filters & Search
   if (req.method === 'GET' && (pathname.endsWith('/HrRequests') || pathname.endsWith('/HrRequests/'))) {
     let result = [...state.requests];
-    if (user.role === 0) {
+    const viewMode = searchParams.get('viewMode') || (user.role === 0 ? 'mine' : 'all');
+
+    if (viewMode === 'mine') {
       result = result.filter(r => r.createdById === user.id);
+    } else if (viewMode === 'assigned') {
+      result = result.filter(r => r.assignedToId === user.id);
     }
+    // if viewMode === 'all', show all company tickets
 
     const status = searchParams.get('status');
     const categoryId = searchParams.get('categoryId');
