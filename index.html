@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HRMS - HR Request Management System</title>
+  <!-- Google Fonts & Bootstrap Icons & Tailwind CSS CDN -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] },
+          colors: {
+            brand: { 50: '#eff6ff', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 900: '#1e3a8a' }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+
+  <!-- TOP NAVIGATION HEADER -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+          <i class="bi bi-people-fill text-xl"></i>
+        </div>
+        <div>
+          <span class="text-xl font-bold tracking-tight bg-gradient-to-r from-brand-700 to-indigo-700 bg-clip-text text-transparent">HR Portal</span>
+          <span class="text-xs ml-2 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold border border-blue-200">PRD v1.0</span>
+        </div>
+      </div>
+
+      <!-- User Switcher for RBAC Simulation -->
+      <div class="flex items-center space-x-3">
+        <div class="hidden sm:flex items-center text-xs text-slate-500 mr-2">
+          <i class="bi bi-person-badge mr-1.5 text-slate-400"></i> Đang đăng nhập:
+        </div>
+        <select id="userSelector" onchange="changeCurrentUser()" class="text-sm bg-slate-100 border border-slate-300 rounded-lg px-3 py-1.5 font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <!-- Populated by JS -->
+        </select>
+        <span id="roleBadge" class="text-xs px-2.5 py-1 rounded-full font-semibold"></span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+    <!-- KPI STATS SUMMARY -->
+    <div id="statsContainer" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-6">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- MAIN ACTION BAR & TABS -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-6">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <!-- Search & Filter -->
+        <div class="flex flex-wrap items-center gap-2.5 flex-1 w-full md:w-auto">
+          <div class="relative flex-1 min-w-[200px] max-w-md">
+            <i class="bi bi-search absolute left-3 top-2.5 text-slate-400"></i>
+            <input type="text" id="searchInput" oninput="debounceSearch()" placeholder="Tìm mã ticket, tiêu đề, tên..." class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
+
+          <select id="statusFilter" onchange="loadRequests()" class="text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-brand-500">
+            <option value="">Tất cả trạng thái</option>
+            <option value="0">Mới (New)</option>
+            <option value="1">Đã tiếp nhận (Acknowledged)</option>
+            <option value="2">Đang xử lý (In Progress)</option>
+            <option value="3">Chờ thông tin (Pending Info)</option>
+            <option value="4">Hoàn thành (Resolved)</option>
+            <option value="5">Từ chối (Rejected)</option>
+            <option value="6">Đã hủy (Cancelled)</option>
+          </select>
+
+          <select id="categoryFilter" onchange="loadRequests()" class="text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-slate-700 focus:ring-2 focus:ring-brand-500">
+            <option value="">Tất cả danh mục</option>
+            <!-- Injected by JS -->
+          </select>
+        </div>
+
+        <!-- Action Button -->
+        <button onclick="openCreateModal()" class="w-full md:w-auto flex items-center justify-center space-x-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg shadow-sm transition">
+          <i class="bi bi-plus-circle"></i>
+          <span>Gửi yêu cầu HR mới</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- REQUESTS TABLE / LIST -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <th class="py-3 px-4">Ticket</th>
+              <th class="py-3 px-4">Tiêu đề & Nhóm</th>
+              <th class="py-3 px-4">Người gửi</th>
+              <th class="py-3 px-4">Độ ưu tiên</th>
+              <th class="py-3 px-4">Trạng thái</th>
+              <th class="py-3 px-4">Thời hạn SLA</th>
+              <th class="py-3 px-4">Phụ trách</th>
+              <th class="py-3 px-4 text-right">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="requestsTableBody" class="divide-y divide-slate-100">
+            <tr>
+              <td colspan="8" class="text-center py-10 text-slate-400">Đang tải danh sách...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- MODAL: TẠO YÊU CẦU MỚI -->
+  <div id="createModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150">
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+          <i class="bi bi-send-plus-fill text-brand-600"></i>
+          Gửi yêu cầu HR mới
+        </h3>
+        <button onclick="closeCreateModal()" class="text-slate-400 hover:text-slate-600"><i class="bi bi-x-lg"></i></button>
+      </div>
+      <form id="createForm" onsubmit="submitCreateRequest(event)" class="p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Danh mục yêu cầu *</label>
+          <select id="modalCategory" required class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-500">
+            <!-- Injected by JS -->
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nhóm chi tiết (Sub-category)</label>
+          <input type="text" id="modalSubCategory" placeholder="Ví dụ: Xin nghỉ ốm, Kiểm tra thuế TNCN..." class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Tiêu đề ngắn gọn *</label>
+          <input type="text" id="modalSubject" required placeholder="Nêu rõ yêu cầu của bạn" class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-500" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Mức độ ưu tiên *</label>
+            <select id="modalPriority" class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-500">
+              <option value="0">Thấp (Low)</option>
+              <option value="1" selected>Bình thường (Medium)</option>
+              <option value="2">Cao (High)</option>
+              <option value="3">Khẩn cấp (Urgent)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">File đính kèm</label>
+            <input type="file" class="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Nội dung chi tiết *</label>
+          <textarea id="modalDescription" required rows="4" placeholder="Mô tả cụ thể thông tin cần HR hỗ trợ..." class="w-full text-sm bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-brand-500"></textarea>
+        </div>
+        <div class="pt-2 flex justify-end space-x-3">
+          <button type="button" onclick="closeCreateModal()" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg">Hủy</button>
+          <button type="submit" class="px-5 py-2 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg shadow-sm">Gửi ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CHI TIẾT TICKET & TƯƠNG TÁC (TÍCH HỢP STATE MACHINE & CHAT) -->
+  <div id="detailModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-4xl w-full h-[90vh] shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in duration-150">
+      
+      <!-- Detail Header -->
+      <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div>
+          <div class="flex items-center gap-2">
+            <span id="dtTicketId" class="font-mono text-sm font-bold text-brand-600 bg-brand-50 px-2 py-0.5 rounded"></span>
+            <span id="dtStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold"></span>
+            <span id="dtPriorityBadge" class="text-xs px-2 py-0.5 rounded-full font-semibold"></span>
+          </div>
+          <h2 id="dtSubject" class="text-base sm:text-lg font-bold text-slate-800 mt-1"></h2>
+        </div>
+        <button onclick="closeDetailModal()" class="text-slate-400 hover:text-slate-600 p-2"><i class="bi bi-x-lg text-lg"></i></button>
+      </div>
+
+      <!-- Detail Body (2 Columns) -->
+      <div class="flex-1 grid grid-cols-1 md:grid-cols-3 overflow-hidden">
+        
+        <!-- Left: Details & Conversation (2 Cols) -->
+        <div class="md:col-span-2 flex flex-col border-r border-slate-200 overflow-hidden">
+          <!-- Ticket Description -->
+          <div class="p-5 border-b border-slate-100 overflow-y-auto max-h-[160px] bg-slate-50/30">
+            <div class="text-xs font-semibold text-slate-400 uppercase mb-1">Mô tả chi tiết</div>
+            <p id="dtDescription" class="text-sm text-slate-700 whitespace-pre-line"></p>
+          </div>
+
+          <!-- Comments Feed -->
+          <div class="flex-1 p-5 overflow-y-auto space-y-3 bg-white" id="dtCommentsList">
+            <!-- Injected by JS -->
+          </div>
+
+          <!-- Add Comment Box -->
+          <div class="p-3 border-t border-slate-200 bg-slate-50">
+            <form onsubmit="submitComment(event)" class="space-y-2">
+              <div class="flex items-center justify-between text-xs text-slate-500">
+                <span class="font-medium"><i class="bi bi-chat-left-text mr-1"></i> Bình luận / Phản hồi</span>
+                <label id="internalNoteToggle" class="flex items-center space-x-1 cursor-pointer select-none text-amber-700 font-semibold hidden">
+                  <input type="checkbox" id="isInternalNote" class="rounded text-amber-600" />
+                  <span>Ghi chú nội bộ (Chỉ HR thấy)</span>
+                </label>
+              </div>
+              <div class="flex gap-2">
+                <input type="text" id="commentInput" required placeholder="Nhập phản hồi hoặc yêu cầu làm rõ..." class="flex-1 text-sm bg-white border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500" />
+                <button type="submit" class="bg-brand-600 hover:bg-brand-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Gửi</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Right: Metadata & Actions (1 Col) -->
+        <div class="p-5 bg-slate-50/70 overflow-y-auto space-y-5 text-sm">
+          
+          <!-- State Transition Actions -->
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Hành động xử lý</div>
+            <div id="actionButtons" class="flex flex-col gap-2">
+              <!-- Dynamically rendered based on state & role -->
+            </div>
+          </div>
+
+          <!-- Ticket Info Meta -->
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2.5 text-xs">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Thông tin ticket</div>
+            <div><span class="text-slate-400">Người tạo:</span> <span id="dtCreatedBy" class="font-semibold text-slate-700"></span></div>
+            <div><span class="text-slate-400">Phòng ban:</span> <span id="dtDepartment" class="text-slate-700"></span></div>
+            <div><span class="text-slate-400">Thời gian tạo:</span> <span id="dtCreatedAt" class="text-slate-700"></span></div>
+            <div><span class="text-slate-400">SLA Cam kết:</span> <span id="dtSlaDeadline" class="font-semibold text-slate-700"></span></div>
+            <div><span class="text-slate-400">Phụ trách:</span> <span id="dtAssignedTo" class="font-semibold text-brand-600"></span></div>
+          </div>
+
+          <!-- Activity History Log -->
+          <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm text-xs">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Lịch sử xử lý (Audit)</div>
+            <div id="dtActivityLogs" class="space-y-3 max-h-48 overflow-y-auto pr-1">
+              <!-- Injected by JS -->
+            </div>
+          </div>
+
+          <!-- Satisfaction Rating section -->
+          <div id="ratingSection" class="bg-amber-50 border border-amber-200 p-4 rounded-xl text-xs space-y-2 hidden">
+            <div class="font-bold text-amber-900">Đánh giá dịch vụ HR</div>
+            <div id="ratingDisplay"></div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- APPLICATION JAVASCRIPT LOGIC -->
+  <script src="/app.js"></script>
+</body>
+</html>
